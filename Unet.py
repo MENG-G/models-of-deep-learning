@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class DoubleConv(nn.Module):
     def __init__(self, inchannels, outchannels):
         super(DoubleConv, self).__init__()
@@ -15,6 +16,14 @@ class DoubleConv(nn.Module):
         x = self.relu(self.bn1(self.conv1(x)))
         x = self.relu(self.bn2(self.conv2(x)))
         return x
+
+
+def adjust_size(data):
+    x1, x2 = data
+    diffY = x2.size()[2] - x1.size()[2]
+    diffX = x2.size()[3] - x1.size()[3]
+    x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])    
+    return [x1, x2]
 
 
 class Unet(nn.Module):
@@ -52,22 +61,26 @@ class Unet(nn.Module):
         p4 = self.pool4(c4)
         c5 = self.conv5(p4)
         up_6 = self.up6(c5)
-        merge6 = torch.cat([up_6, c4],dim=1)
+        # 并没有使用原论文的crop，而是对上采样后低纬度的tensor进行padding
+        merge6 = torch.cat(adjust_size([up_6, c4]),dim=1) 
         c6 = self.conv6(merge6)
         up_7 = self.up7(c6)
-        merge7 = torch.cat([up_7,c3],dim=1)
+        merge7 = torch.cat(adjust_size([up_7,c3]),dim=1)
         c7 = self.conv7(merge7)
         up_8 = self.up8(c7)
-        merge8 = torch.cat([up_8,c2],dim=1)
+        merge8 = torch.cat(adjust_size([up_8,c2]),dim=1)
         c8 = self.conv8(merge8)
         up_9 = self.up9(c8)
-        merge9 = torch.cat([up_9,c1],dim=1)
+        merge9 = torch.cat(adjust_size([up_9,c1]),dim=1)
         c9 = self.conv9(merge9)
         c10 = self.conv10(c9)
         out = nn.Sigmoid()(c10)
-
         return out
 
 
 
 
+if __name__ == '__main__':
+    model = Unet(1, 1)
+    x = torch.randn(1, 1, 572, 572)
+    print(model(x).shape)
